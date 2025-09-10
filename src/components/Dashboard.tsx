@@ -41,7 +41,7 @@ function Dashboard({ user }: { user: User }) {
             <FiveDayForecastCard
               apiKey={import.meta.env.VITE_OPENWEATHER_API_KEY}
               useMyLocation
-              heightClassName="h-[550px]" // Reduced height
+              heightClassName="h-[540px]" // Reduced height
               onTempChange={handleTempChange}
             />
           </div>
@@ -50,7 +50,7 @@ function Dashboard({ user }: { user: User }) {
             <LatestNewsCard
               country="us"
               mood={mood}
-              heightClassName="h-[550px] overflow-y-auto" // Reduced height and made scrollable
+              heightClassName="h-[540px] overflow-y-auto" // Reduced height and made scrollable
               apiKey={import.meta.env.VITE_NEWS_API_KEY}
             />
           </div>
