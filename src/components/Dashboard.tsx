@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import LatestNewsCard, { Mood } from './LatestNewsCard';
+import FiveDayForecastCard from './FiveDayForecastCard';
 
 interface User {
   name: string;
@@ -27,15 +28,7 @@ interface City {
   admin1?: string;
 }
 
-interface ForecastDay {
-  date: string;
-  temperature: number;
-  weather_code: number;
-}
 
-interface Forecast {
-  daily: ForecastDay[];
-}
 
 function Dashboard({ user }: { user: User }) {
   const getMoodFromTemp = (t?: number): Mood => {
@@ -116,25 +109,6 @@ function Dashboard({ user }: { user: User }) {
     }
   };
 
-  const fetchForecast = async (lat: number, lon: number): Promise<Forecast> => {
-    try {
-      const response = await axios.get(
-        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=0dded06259918d09bb53a2782513f05b`
-      );
-      const data = response.data;
-      const dailyData = data.list
-        .filter((_: any, index: number) => index % 8 === 0)
-        .map((entry: any) => ({
-          date: entry.dt_txt,
-          temperature: entry.main.temp,
-          weather_code: normalizeWeatherCode(entry.weather[0].id),
-        }));
-      return { daily: dailyData };
-    } catch (error) {
-      console.error('Error fetching forecast:', error);
-      throw error;
-    }
-  };
 
   useEffect(() => {
     fetchData();
@@ -273,84 +247,6 @@ function Dashboard({ user }: { user: User }) {
     return weatherIcons[code] || '🌤️';
   };
 
-  const ForecastCard = () => {
-    const [forecast, setForecast] = useState<Forecast | null>(null);
-    const [loading, setLoading] = useState<boolean>(false);
-    const [error, setError] = useState<string | null>(null);
-
-    const fetchUserForecast = async () => {
-      if (!navigator.geolocation) {
-        setError('Geolocation is not supported by your browser.');
-        return;
-      }
-      setLoading(true);
-      setError(null);
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          try {
-            const { latitude, longitude } = position.coords;
-            const forecastData = await fetchForecast(latitude, longitude);
-            setForecast(forecastData);
-          } catch {
-            setError('Failed to fetch forecast data. Please try again later.');
-          } finally {
-            setLoading(false);
-          }
-        },
-        () => {
-          setError('Failed to get your location.');
-          setLoading(false);
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-      );
-    };
-
-    useEffect(() => {
-      fetchUserForecast();
-    }, []);
-
-    return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full h-[460px] lg:h-[460px] overflow-hidden hover:shadow-lg transition-all duration-300 ease-in-out relative group">
-        <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
-        <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-          <span className="mr-2">📍</span>
-          5-Day Forecast
-        </h2>
-        {loading ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-          </div>
-        ) : error ? (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-red-600">{error}</p>
-          </div>
-        ) : forecast && Array.isArray(forecast.daily) ? (
-          <div className="flex-1 space-y-4">
-            {forecast.daily.map((day, index) => (
-              <div key={index} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div className="text-sm text-gray-700 dark:text-gray-300">
-                  {new Date(day.date).toLocaleDateString('en-US', {
-                    weekday: 'short', month: 'short', day: 'numeric',
-                  })}
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-lg font-medium text-gray-900 dark:text-white">
-                    {day.temperature}°C
-                  </span>
-                  <span className="text-xl">{getWeatherIcon(day.weather_code)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-gray-500">No forecast data available</p>
-          </div>
-        )}
-      </div>
-    );
-  };
 
   const mood = getMoodFromTemp(weather?.current?.temperature_2m);
 
@@ -378,7 +274,11 @@ function Dashboard({ user }: { user: User }) {
         {/* Forecast + Latest News */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
           <div className="lg:col-span-1 h-full">
-            <ForecastCard />
+            <FiveDayForecastCard
+              apiKey="0dded06259918d09bb53a2782513f05b" 
+              useMyLocation
+              heightClassName="h-[460px] lg:h-[460px]"
+            />
           </div>
           <div className="lg:col-span-1 h-full">
             <LatestNewsCard
