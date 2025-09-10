@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import LatestNewsCard, { Mood } from './LatestNewsCard';
 import FiveDayForecastCard from './FiveDayForecastCard';
 
-interface User {
-  name: string;
-}
+interface User { name: string; }
 
 interface Location {
   name: string;
@@ -28,9 +26,11 @@ interface City {
   admin1?: string;
 }
 
-
-
 function Dashboard({ user }: { user: User }) {
+  // left stack cards share the same height
+  const LEFT_CARD_HEIGHT = 'h-[420px]';
+
+  // mood for LatestNewsCard based on temperature
   const getMoodFromTemp = (t?: number): Mood => {
     if (t == null) return 'neutral';
     if (t <= 15) return 'cold';
@@ -45,33 +45,15 @@ function Dashboard({ user }: { user: User }) {
 
   const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
 
-
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<City[]>([]);
   const [isSearching, setIsSearching] = useState<boolean>(false);
 
-  // Initial weather (Open-Meteo current)
-  const fetchData = async () => {
-    try {
-      setLoading(true);
-      const weatherResponse = await axios.get(
-        `https://api.open-meteo.com/v1/forecast?latitude=${currentLocation.lat}&longitude=${currentLocation.lon}&current=temperature_2m,weather_code&timezone=auto`
-      );
-      const weatherData: Weather = weatherResponse.data;
-      setWeather(weatherData);
-      setError(null);
-    } catch {
-      setError('Failed to fetch data. Please try again later.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Map OpenWeather codes -> your icon/description codes
+  // Map OpenWeather codes to your icon/description codes
   const normalizeWeatherCode = (owmId: number): number => {
-    if (owmId === 800) return 0;                 // clear sky
-    if (owmId === 801) return 2;                 // few clouds -> partly cloudy
-    if (owmId >= 802 && owmId <= 804) return 3;  // broken/overcast -> overcast
+    if (owmId === 800) return 0;
+    if (owmId === 801) return 2;
+    if (owmId >= 802 && owmId <= 804) return 3;
     const group = Math.floor(owmId / 100);
     switch (group) {
       case 2: return 95; // thunderstorm
@@ -79,7 +61,7 @@ function Dashboard({ user }: { user: User }) {
       case 5: return 63; // rain
       case 6: return 73; // snow
       case 7: return 45; // mist/fog/etc
-      default: return 2; // fallback partly cloudy
+      default: return 2;
     }
   };
 
@@ -103,45 +85,42 @@ function Dashboard({ user }: { user: User }) {
       setError('Failed to fetch weather data. Please try again later.');
     } finally {
       setWeatherLoading(false);
+      setLoading(false);
     }
   };
-  useEffect(() => {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const { latitude, longitude } = position.coords;
-        await fetchWeatherForLocation({
-          name: 'My Location',
-          lat: latitude,
-          lon: longitude,
-        });
-      },
-      (err) => {
-        console.error('Geolocation failed, falling back to New Delhi:', err);
-        // fallback to New Delhi if user denies
-        fetchWeatherForLocation({
-          name: 'New Delhi',
-          lat: 28.6139,
-          lon: 77.2090,
-        });
-      },
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-    );
-  } else {
-    // fallback if browser doesn't support geolocation
-    fetchWeatherForLocation({
-      name: 'New Delhi',
-      lat: 28.6139,
-      lon: 77.2090,
-    });
-  }
-}, []);
 
-
+  // First load: try geolocation, else fall back to New Delhi
   useEffect(() => {
-    fetchData();
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const { latitude, longitude } = position.coords;
+          await fetchWeatherForLocation({
+            name: 'My Location',
+            lat: latitude,
+            lon: longitude,
+          });
+        },
+        () => {
+          fetchWeatherForLocation({
+            name: 'New Delhi',
+            lat: 28.6139,
+            lon: 77.2090,
+          });
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+      );
+    } else {
+      fetchWeatherForLocation({
+        name: 'New Delhi',
+        lat: 28.6139,
+        lon: 77.2090,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // City search helpers
   const searchCities = async (query: string) => {
     if (query.length < 2) {
       setSearchResults([]);
@@ -188,27 +167,8 @@ function Dashboard({ user }: { user: User }) {
       async (position) => {
         try {
           const { latitude, longitude } = position.coords;
-
-          let cityName = 'Current Location';
-          try {
-            const geocodingResponse = await axios.get(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=10&addressdetails=1`
-            );
-            if (geocodingResponse.data && geocodingResponse.data.display_name) {
-              const address = geocodingResponse.data.address;
-              if (address.city) cityName = `${address.city}, ${address.country}`;
-              else if (address.town) cityName = `${address.town}, ${address.country}`;
-              else if (address.village) cityName = `${address.village}, ${address.country}`;
-              else if (address.county) cityName = `${address.county}, ${address.country}`;
-              else {
-                const parts = geocodingResponse.data.display_name.split(', ');
-                if (parts.length >= 2) cityName = `${parts[0]}, ${parts[parts.length - 1]}`;
-              }
-            }
-          } catch { /* ignore reverse geocode errors */ }
-
           await fetchWeatherForLocation({
-            name: cityName,
+            name: 'My Location',
             lat: latitude,
             lon: longitude,
           });
@@ -237,23 +197,14 @@ function Dashboard({ user }: { user: User }) {
     );
   };
 
+  // Render helpers
   const getWeatherDescription = (code: number): string => {
     const weatherCodes: { [key: number]: string } = {
-      0: 'Clear sky',
-      1: 'Mainly clear',
-      2: 'Partly cloudy',
-      3: 'Overcast',
-      45: 'Foggy',
-      48: 'Depositing rime fog',
-      51: 'Light drizzle',
-      53: 'Moderate drizzle',
-      55: 'Dense drizzle',
-      61: 'Slight rain',
-      63: 'Moderate rain',
-      65: 'Heavy rain',
-      71: 'Slight snow',
-      73: 'Moderate snow',
-      75: 'Heavy snow',
+      0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+      45: 'Foggy', 48: 'Depositing rime fog',
+      51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+      61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+      71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow',
       95: 'Thunderstorm',
     };
     return weatherCodes[code] || 'Unknown';
@@ -275,12 +226,13 @@ function Dashboard({ user }: { user: User }) {
     return weatherIcons[code] || '🌤️';
   };
 
-
   const mood = getMoodFromTemp(weather?.current?.temperature_2m);
 
   return (
     <>
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Full-bleed wrapper: stretches to near the viewport edges even if a parent is constrained */}
+      <div className="relative left-1/2 right-1/2 -mx-[50vw] w-screen px-2 sm:px-4 lg:px-8 py-8">
+
         {/* Welcome */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8 hover:shadow-lg transition-all duration-300 ease-in-out relative group">
           <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
@@ -299,134 +251,132 @@ function Dashboard({ user }: { user: User }) {
           </div>
         </div>
 
-        {/* Forecast + Latest News */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch">
+        {/* Grid: Left stack (two cards) | Right (Latest News spanning both rows) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-stretch lg:auto-rows-auto">
+          {/* LEFT / TOP: CURRENT WEATHER (moved here) */}
           <div className="lg:col-span-1 h-full">
-            <FiveDayForecastCard
-              apiKey="0dded06259918d09bb53a2782513f05b" 
-              useMyLocation
-              heightClassName="h-[460px] lg:h-[460px]"
-            />
+            <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col ${LEFT_CARD_HEIGHT} hover:shadow-lg transition-all duration-300 ease-in-out relative group`}>
+              <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-purple-400 via-violet-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+              <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                <span className="mr-2">🌤️</span>
+                Current Weather
+              </h2>
+
+              {error ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <p className={`text-red-600 ${weatherLoading ? 'opacity-75' : 'opacity-100'}`}>{error}</p>
+                </div>
+              ) : weather ? (
+                <div className={`flex-1 transition-all duration-500 ${weatherLoading ? 'opacity-75 scale-95' : 'opacity-100 scale-100'}`}>
+                  <div className="flex items-center mb-3 relative">
+                    <span className="text-3xl sm:text-4xl font-display font-bold text-gray-900 dark:text-white">
+                      {weather.current?.temperature_2m}°C
+                    </span>
+                    <span className="text-2xl sm:text-3xl ml-3 opacity-80">
+                      {weather.current?.weather_code !== undefined &&
+                        getWeatherIcon(weather.current.weather_code)}
+                    </span>
+                  </div>
+                  <p className="text-gray-700 dark:text-gray-200 mb-2 font-medium text-lg">
+                    {weather.current?.weather_code !== undefined &&
+                      getWeatherDescription(weather.current?.weather_code)}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-medium">
+                    {currentLocation ? currentLocation.name : 'Detecting location...'}
+                  </p>
+
+                  {/* Search + My Location */}
+                  <div className="space-y-2">
+                    <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Search Location:</p>
+                    <div className="flex space-x-2">
+                      <div className="relative flex-1">
+                        <input
+                          type="text"
+                          value={searchQuery}
+                          onChange={handleSearchChange}
+                          placeholder="Search for any city..."
+                          className="w-full px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+                        />
+                        {isSearching && (
+                          <div className="absolute right-3 top-2">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+                          </div>
+                        )}
+
+                        {searchResults.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
+                            {searchResults.map((city, index) => (
+                              <button
+                                key={index}
+                                onClick={() => handleLocationSelect(city)}
+                                className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm border-b border-gray-100 last:border-b-0"
+                              >
+                                <div className="font-medium">{city.name}</div>
+                                <div className="text-xs text-gray-500">
+                                  {city.country} {city.admin1 && `• ${city.admin1}`}
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <button
+                        onClick={getCurrentLocation}
+                        disabled={weatherLoading}
+                        className={`text-white px-3 py-2 rounded-md text-xs transition-colors flex items-center justify-center space-x-1 bg-gradient-to-r from-purple-300 to-purple-400 hover:from-purple-400 hover:to-purple-500 ${weatherLoading ? 'cursor-not-allowed opacity-75' : ''}`}
+                      >
+                        {weatherLoading ? (
+                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <span>📍</span>
+                            <span>My Location</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : loading ? (
+                <div className="flex-1">
+                  <div className="animate-pulse">
+                    <div className="flex items-center mb-3">
+                      <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-1/3"></div>
+                      <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-8 ml-3"></div>
+                    </div>
+                    <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-2"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-2/3 mb-4"></div>
+                    <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-2"></div>
+                    <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-full mb-2"></div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 flex items-center justify-center">
+                  <p className="text-gray-500">Weather data unavailable</p>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="lg:col-span-1 h-full">
+
+          {/* RIGHT: Latest News spans both rows and fills height */}
+          <div className="lg:col-span-1 lg:row-span-2 h-full">
             <LatestNewsCard
               country="us"
               mood={mood}
-              heightClassName="h-[460px] lg:h-[460px]"
+              heightClassName="h-full"
               apiKey="9f983265846e40e297d1c8e71a058c32"
             />
           </div>
-        </div>
 
-        {/* Current Weather (single card) */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full min-h-[400px] hover:shadow-lg transition-all duration-300 ease-in-out relative group">
-          <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-purple-400 via-violet-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
-          <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-            <span className="mr-2">🌤️</span>
-            Current Weather
-          </h2>
-          {error ? (
-            <div className="flex flex-col h-full">
-              <div className={`flex-1 transition-opacity duration-200 ${weatherLoading ? 'opacity-75' : 'opacity-100'}`}>
-                <p className="text-red-600">{error}</p>
-              </div>
-            </div>
-          ) : weather ? (
-            <div className="flex flex-col h-full">
-              <div className={`flex-1 transition-all duration-500 ${weatherLoading ? 'opacity-75 scale-95' : 'opacity-100 scale-100'}`}>
-                <div className="flex items-center mb-3 relative">
-                  <span className="text-3xl sm:text-4xl font-display font-bold text-gray-900 dark:text-white">
-                    {weather.current?.temperature_2m}°C
-                  </span>
-                  <span className="text-2xl sm:text-3xl ml-3 opacity-80">
-                    {weather.current?.weather_code !== undefined &&
-                      getWeatherIcon(weather.current.weather_code)}
-                  </span>
-                </div>
-                <p className="text-gray-700 dark:text-gray-200 mb-2 font-medium text-lg">
-                  {weather.current?.weather_code !== undefined &&
-                    getWeatherDescription(weather.current?.weather_code)}
-                </p>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-medium">
-                  {currentLocation ? currentLocation.name : 'Detecting location...'}
-                </p>
-
-
-                <div className="space-y-2">
-                  <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Search Location:</p>
-                  <div className="flex space-x-2">
-                    <div className="relative flex-1">
-                      <input
-                        type="text"
-                        value={searchQuery}
-                        onChange={handleSearchChange}
-                        placeholder="Search for any city..."
-                        className="w-full px-2 sm:px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
-                      />
-                      {isSearching && (
-                        <div className="absolute right-3 top-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
-                        </div>
-                      )}
-
-                      {searchResults.length > 0 && (
-                        <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-40 overflow-y-auto">
-                          {searchResults.map((city, index) => (
-                            <button
-                              key={index}
-                              onClick={() => handleLocationSelect(city)}
-                              className="w-full text-left px-3 py-2 hover:bg-gray-100 text-sm border-b border-gray-100 last:border-b-0"
-                            >
-                              <div className="font-medium">{city.name}</div>
-                              <div className="text-xs text-gray-500">
-                                {city.country} {city.admin1 && `• ${city.admin1}`}
-                              </div>
-                            </button>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={getCurrentLocation}
-                      disabled={weatherLoading}
-                      className={`text-white px-3 py-2 rounded-md text-xs transition-colors flex items-center justify-center space-x-1 bg-gradient-to-r from-purple-300 to-purple-400 hover:from-purple-400 hover:to-purple-500 ${weatherLoading ? 'cursor-not-allowed opacity-75' : ''}`}
-                    >
-                      {weatherLoading ? (
-                        <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                      ) : (
-                        <>
-                          <span>📍</span>
-                          <span>My Location</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          ) : loading ? (
-            <div className="flex flex-col h-full">
-              <div className="flex-1">
-                <div className="animate-pulse">
-                  <div className="flex items-center mb-3">
-                    <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-1/3"></div>
-                    <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-8 ml-3"></div>
-                  </div>
-                  <div className="h-6 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-2"></div>
-                  <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-2/3 mb-4"></div>
-                  <div className="h-4 bg-gray-200 dark:bg-gray-600 rounded w-1/2 mb-2"></div>
-                  <div className="h-8 bg-gray-200 dark:bg-gray-600 rounded w-full mb-2"></div>
-                </div>
-              </div>
-            </div>
-          ) : (
-            <div className="flex flex-col h-full">
-              <div className={`flex-1 transition-opacity duration-200 ${weatherLoading ? 'opacity-75' : 'opacity-100'}`}>
-                <p className="text-gray-500">Weather data unavailable</p>
-              </div>
-            </div>
-          )}
+          {/* LEFT / BOTTOM: 5-DAY FORECAST (moved below) */}
+          <div className="lg:col-span-1 h-full">
+            <FiveDayForecastCard
+              apiKey="0dded06259918d09bb53a2782513f05b"
+              useMyLocation
+              heightClassName={LEFT_CARD_HEIGHT}
+            />
+          </div>
         </div>
       </div>
 
