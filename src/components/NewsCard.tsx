@@ -4,23 +4,18 @@ import axios from 'axios';
 export type Mood = 'neutral' | 'cold' | 'hot' | 'cool';
 
 type LatestNewsCardProps = {
-  /** NewsAPI key. If you keep it env-based, pass process.env.NEXT_PUBLIC_NEWS_API_KEY */
+ 
   apiKey?: string;
-  /** ISO 3166-1 country code for top-headlines endpoint */
+  
   country?: string;
-  /** Tailwind height class to control fixed card height */
   heightClassName?: string;
-  /** Extra classes for the outer card */
   className?: string;
-  /** Optional mood to filter headlines by keywords */
   mood?: Mood;
-  /** Card title */
   title?: string;
 };
 
 const keywordMap: Record<Mood, string[]> = {
   neutral: [],
-  // cold → depressing
   cold: [
     'recession','layoff','bankruptcy','decline','crash','loss','pollution',
     'war','conflict','death','dies','killed','fatal','flood','earthquake',

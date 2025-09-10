@@ -36,12 +36,12 @@ function Dashboard({ user }: { user: User }) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
           <div className="lg:col-span-1">
             <FiveDayForecastCard
               apiKey={import.meta.env.VITE_OPENWEATHER_API_KEY}
               useMyLocation
-              heightClassName="h-[540px]" // Reduced height
+              heightClassName="h-[550px] " 
               onTempChange={handleTempChange}
             />
           </div>
@@ -50,7 +50,7 @@ function Dashboard({ user }: { user: User }) {
             <LatestNewsCard
               country="us"
               mood={mood}
-              heightClassName="h-[540px] overflow-y-auto" // Reduced height and made scrollable
+              heightClassName="h-[550px]" 
               apiKey={import.meta.env.VITE_NEWS_API_KEY}
             />
           </div>

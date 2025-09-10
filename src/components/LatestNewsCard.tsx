@@ -126,7 +126,7 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
   return (
     <div
       className={[
-        'bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full overflow-hidden',
+        'bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col overflow-hidden',
         'hover:shadow-lg transition-all duration-300 ease-in-out relative group',
         heightClassName,
         className,

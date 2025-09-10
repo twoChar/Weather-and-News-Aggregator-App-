@@ -144,7 +144,7 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
   };
 
   return (
-    <div className={['bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full overflow-hidden',
+    <div className={['bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col overflow-hidden',
                      'hover:shadow-lg transition-all duration-300 ease-in-out relative group',
                      heightClassName, className].join(' ')}>
       <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
