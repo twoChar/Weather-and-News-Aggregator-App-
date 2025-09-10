@@ -43,11 +43,8 @@ function Dashboard({ user }: { user: User }) {
   const [weatherLoading, setWeatherLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [currentLocation, setCurrentLocation] = useState<Location>({
-    name: 'New Delhi',
-    lat: 28.6139,
-    lon: 77.2090,
-  });
+  const [currentLocation, setCurrentLocation] = useState<Location | null>(null);
+
 
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [searchResults, setSearchResults] = useState<City[]>([]);
@@ -108,6 +105,37 @@ function Dashboard({ user }: { user: User }) {
       setWeatherLoading(false);
     }
   };
+  useEffect(() => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const { latitude, longitude } = position.coords;
+        await fetchWeatherForLocation({
+          name: 'My Location',
+          lat: latitude,
+          lon: longitude,
+        });
+      },
+      (err) => {
+        console.error('Geolocation failed, falling back to New Delhi:', err);
+        // fallback to New Delhi if user denies
+        fetchWeatherForLocation({
+          name: 'New Delhi',
+          lat: 28.6139,
+          lon: 77.2090,
+        });
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+    );
+  } else {
+    // fallback if browser doesn't support geolocation
+    fetchWeatherForLocation({
+      name: 'New Delhi',
+      lat: 28.6139,
+      lon: 77.2090,
+    });
+  }
+}, []);
 
 
   useEffect(() => {
@@ -321,8 +349,9 @@ function Dashboard({ user }: { user: User }) {
                     getWeatherDescription(weather.current?.weather_code)}
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-medium">
-                  {currentLocation.name}
+                  {currentLocation ? currentLocation.name : 'Detecting location...'}
                 </p>
+
 
                 <div className="space-y-2">
                   <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300">Search Location:</p>
