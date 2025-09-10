@@ -4,36 +4,32 @@ import axios from 'axios';
 type ForecastDay = {
   date: string;
   temperature: number;
-  weather_code: number; // normalized code (Open-Meteo style)
+  weather_code: number; // normalized code
 };
 
 type FiveDayForecastCardProps = {
-  /** OpenWeather API key (use env in prod) */
   apiKey?: string;
-  /** If true, tries browser geolocation first */
   useMyLocation?: boolean;
-  /** Fallback (or explicit) coordinates */
   lat?: number;
   lon?: number;
-  /** Tailwind height class for the outer card */
   heightClassName?: string;
-  /** Extra classes */
   className?: string;
-  /** Card title */
   title?: string;
 };
 
+type Unit = 'metric' | 'imperial'; // metric = °C, imperial = °F
+
 const normalizeWeatherCode = (owmId: number): number => {
-  if (owmId === 800) return 0;               // clear
-  if (owmId === 801) return 2;               // few clouds -> partly cloudy
-  if (owmId >= 802 && owmId <= 804) return 3;// broken/overcast -> overcast
+  if (owmId === 800) return 0;
+  if (owmId === 801) return 2;
+  if (owmId >= 802 && owmId <= 804) return 3;
   const group = Math.floor(owmId / 100);
   switch (group) {
-    case 2: return 95; // thunderstorm
-    case 3: return 53; // drizzle
-    case 5: return 63; // rain
-    case 6: return 73; // snow
-    case 7: return 45; // mist/fog/etc
+    case 2: return 95;
+    case 3: return 53;
+    case 5: return 63;
+    case 6: return 73;
+    case 7: return 45;
     default: return 2;
   }
 };
@@ -66,24 +62,44 @@ const getWeatherDescription = (code: number): string => {
   return map[code] ?? 'Unknown';
 };
 
+async function reverseGeocode(lat: number, lon: number): Promise<string | undefined> {
+  try {
+    const { data } = await axios.get(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`
+    );
+    const a = data?.address;
+    if (!a) return data?.display_name;
+    return a.city || a.town || a.village || a.county || data?.display_name;
+  } catch {
+    return undefined;
+  }
+}
+
 const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
-  apiKey = '0dded06259918d09bb53a2782513f05b', // <- replace with env var
+  apiKey = '0dded06259918d09bb53a2782513f05b',
   useMyLocation = true,
-  lat = 28.6139,   // New Delhi fallback
-  lon = 77.2090,   // New Delhi fallback
-  heightClassName = 'h-[420px]', // keep small as requested
+  lat = 28.6139,
+  lon = 77.2090,
+  heightClassName = 'h-[420px]',
   className = '',
   title = 'Weather & 5-Day Forecast',
 }) => {
-  // current weather section (merged in this card)
+  // unit toggle (persisted)
+  const [unit, setUnit] = useState<Unit>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('unit') as Unit | null;
+      if (saved === 'metric' || saved === 'imperial') return saved;
+    }
+    return 'metric';
+  });
+
   const [currentTemp, setCurrentTemp] = useState<number | null>(null);
   const [currentCode, setCurrentCode] = useState<number | null>(null);
-  const [locationName, setLocationName] = useState<string>('Detecting location...');
+  const [locationName, setLocationName] = useState<string>('Detecting location…');
 
-  // forecast
   const [days, setDays] = useState<ForecastDay[] | null>(null);
 
-  // search UI (moved from Current Weather card)
+  // search UI
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<
     { name: string; latitude: number; longitude: number; country?: string; admin1?: string }[]
@@ -93,17 +109,23 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCurrent = async (plat: number, plon: number) => {
+  // keep last coords so we can refetch on unit switch
+  const [lastCoords, setLastCoords] = useState<{ lat: number; lon: number }>({ lat, lon });
+
+  const degreeSymbol = unit === 'metric' ? '°C' : '°F';
+
+  const fetchCurrent = async (plat: number, plon: number, u: Unit): Promise<string | undefined> => {
     const { data } = await axios.get(
-      `https://api.openweathermap.org/data/2.5/weather?lat=${plat}&lon=${plon}&units=metric&appid=${apiKey}`
+      `https://api.openweathermap.org/data/2.5/weather?lat=${plat}&lon=${plon}&units=${u}&appid=${apiKey}`
     );
     setCurrentTemp(data.main?.temp ?? null);
     setCurrentCode(normalizeWeatherCode(data.weather?.[0]?.id));
+    return data?.name as string | undefined;
   };
 
-  const fetchForecast = async (plat: number, plon: number): Promise<ForecastDay[]> => {
+  const fetchForecast = async (plat: number, plon: number, u: Unit): Promise<ForecastDay[]> => {
     const { data } = await axios.get(
-      `https://api.openweathermap.org/data/2.5/forecast?lat=${plat}&lon=${plon}&units=metric&appid=${apiKey}`
+      `https://api.openweathermap.org/data/2.5/forecast?lat=${plat}&lon=${plon}&units=${u}&appid=${apiKey}`
     );
     return data.list
       .filter((_: any, idx: number) => idx % 8 === 0)
@@ -115,14 +137,21 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
       }));
   };
 
-  const loadAll = async (plat: number, plon: number, prettyName?: string) => {
+  const loadAll = async (plat: number, plon: number, fallbackLabel?: string, u: Unit = unit) => {
     setLoading(true);
     setError(null);
     try {
-      await fetchCurrent(plat, plon);
-      const f = await fetchForecast(plat, plon);
+      const apiName = await fetchCurrent(plat, plon, u);
+      const f = await fetchForecast(plat, plon, u);
       setDays(f);
-      if (prettyName) setLocationName(prettyName);
+      setLastCoords({ lat: plat, lon: plon });
+
+      let finalLabel = apiName || fallbackLabel;
+      if (!finalLabel) {
+        const rev = await reverseGeocode(plat, plon);
+        finalLabel = rev || 'My Location';
+      }
+      setLocationName(finalLabel);
     } catch {
       setDays(null);
       setError('Failed to fetch weather data. Please try again later.');
@@ -133,38 +162,52 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
 
   // initial load (geolocation → fallback)
   useEffect(() => {
-  let cancelled = false;
-  const init = async () => {
-    try {
-      let plat = lat, plon = lon, label = 'My Location';
-      if (useMyLocation && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-        try {
-          const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-            navigator.geolocation.getCurrentPosition(
-              resolve, reject,
-              { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-            )
-          );
-          plat = pos.coords.latitude;
-          plon = pos.coords.longitude;
-        } catch {
+    let cancelled = false;
+    const init = async () => {
+      try {
+        let plat = lat, plon = lon;
+        let label: string | undefined = 'My Location';
+
+        if (useMyLocation && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+          try {
+            const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+              navigator.geolocation.getCurrentPosition(
+                resolve, reject,
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+              )
+            );
+            plat = pos.coords.latitude;
+            plon = pos.coords.longitude;
+          } catch {
+            label = 'New Delhi';
+          }
+        } else {
           label = 'New Delhi';
         }
-      } else {
-        label = 'New Delhi';
+        if (!cancelled) await loadAll(plat, plon, label, unit);
+      } catch {
+        /* no-op */
       }
-      if (!cancelled) {
-        setLocationName(label);
-        await loadAll(plat, plon, label); // loadAll manages loading state
-      }
-    } catch {
-      // no-op
-    }
-  };
-  init();
-  return () => { cancelled = true; };
-}, [apiKey, useMyLocation, lat, lon]);
+    };
+    init();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiKey, useMyLocation, lat, lon, unit]); // include `unit` so first render respects saved unit
 
+  // persist unit choice
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('unit', unit);
+    }
+  }, [unit]);
+
+  // re-fetch when unit toggles (using last coords)
+  const onToggleUnit = (u: Unit) => {
+    if (u === unit) return;
+    setUnit(u);
+    // Refetch in the new unit but keep the same location label
+    loadAll(lastCoords.lat, lastCoords.lon, locationName, u);
+  };
 
   // search helpers
   const searchCities = async (query: string) => {
@@ -188,9 +231,8 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
   const onSelectCity = async (city: any) => {
     setSearchQuery('');
     setSearchResults([]);
-    const label = city.admin1 ? `${city.name}, ${city.admin1}` : `${city.name}`;
-    setLocationName(label);
-    await loadAll(city.latitude, city.longitude, label);
+    const fallback = city.admin1 ? `${city.name}, ${city.admin1}` : `${city.name}`;
+    await loadAll(city.latitude, city.longitude, fallback, unit);
   };
 
   const onMyLocation = () => {
@@ -200,8 +242,7 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
       async (pos) => {
         const plat = pos.coords.latitude;
         const plon = pos.coords.longitude;
-        setLocationName('My Location');
-        await loadAll(plat, plon, 'My Location');
+        await loadAll(plat, plon, 'My Location', unit);
       },
       () => setLoading(false),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
@@ -220,10 +261,38 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
       <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
       <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10" />
 
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-3 flex items-center">
-        <span className="mr-2">🌦️</span>
-        {title}
-      </h2>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+          <span className="mr-2">🌦️</span>
+          {title}
+        </h2>
+
+        {/* Unit switch */}
+        <div className="inline-flex rounded-md shadow-sm overflow-hidden border border-gray-200 dark:border-gray-700">
+          <button
+            onClick={() => onToggleUnit('metric')}
+            className={`px-3 py-1 text-xs font-medium ${
+              unit === 'metric'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+            }`}
+            aria-pressed={unit === 'metric'}
+          >
+            °C
+          </button>
+          <button
+            onClick={() => onToggleUnit('imperial')}
+            className={`px-3 py-1 text-xs font-medium border-l border-gray-200 dark:border-gray-700 ${
+              unit === 'imperial'
+                ? 'bg-blue-600 text-white'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300'
+            }`}
+            aria-pressed={unit === 'imperial'}
+          >
+            °F
+          </button>
+        </div>
+      </div>
 
       {/* CURRENT WEATHER */}
       <div className="mb-3">
@@ -238,7 +307,7 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
             <div>
               <div className="flex items-center">
                 <span className="text-3xl font-bold text-gray-900 dark:text-white">
-                  {currentTemp != null ? `${Math.round(currentTemp)}°C` : '--'}
+                  {currentTemp != null ? `${Math.round(currentTemp)}${degreeSymbol}` : '--'}
                 </span>
                 <span className="text-2xl ml-3">
                   {currentCode != null ? getWeatherIcon(currentCode) : '🌤️'}
@@ -247,10 +316,11 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
               <p className="text-gray-700 dark:text-gray-300">
                 {currentCode != null ? getWeatherDescription(currentCode) : '—'}
               </p>
-              <p className="text-sm text-gray-500 dark:text-gray-400">{locationName}</p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {locationName}
+              </p>
             </div>
 
-            {/* Quick actions */}
             <div className="flex items-center space-x-2">
               <button
                 onClick={onMyLocation}
@@ -321,7 +391,7 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
                 </div>
                 <div className="flex items-center space-x-2">
                   <span className="text-lg font-medium text-gray-900 dark:text-white">
-                    {Math.round(day.temperature)}°C
+                    {Math.round(day.temperature)}{degreeSymbol}
                   </span>
                   <span className="text-xl">{getWeatherIcon(day.weather_code)}</span>
                 </div>
