@@ -1,9 +1,10 @@
 {
-  "name": "mini-web-app",
+  "name": "Weather-and-News-Aggregator-App-",
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://twochar.github.io/mini-web-app/",
+  "homepage": "https://twochar.github.io/Weather-and-News-Aggregator-App-/"
+,
   "scripts": {
     "dev": "vite",
     "build": "vite build",
