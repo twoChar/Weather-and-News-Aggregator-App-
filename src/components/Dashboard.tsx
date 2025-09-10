@@ -38,6 +38,16 @@ interface City {
   admin1?: string;
 }
 
+interface ForecastDay {
+  date: string;
+  temperature: number;
+  weather_code: number;
+}
+
+interface Forecast {
+  daily: ForecastDay[];
+}
+
 function Dashboard({ user }: { user: User }) {
   const [joke, setJoke] = useState<Joke | null>(null);
   const [weather, setWeather] = useState<Weather | null>(null);
@@ -55,6 +65,7 @@ function Dashboard({ user }: { user: User }) {
   const [isSearching, setIsSearching] = useState<boolean>(false);
   const [cryptoData, setCryptoData] = useState<CryptoData | null>(null);
   const [cryptoLoading, setCryptoLoading] = useState<boolean>(false);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
 
   const fetchData = async () => {
     try {
@@ -122,20 +133,99 @@ function Dashboard({ user }: { user: User }) {
     try {
       setWeatherLoading(true);
 
-      const weatherResponse = await axios.get(
-        `https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&current=temperature_2m,weather_code&timezone=auto`
+      const response = await axios.get(
+        `https://api.openweathermap.org/data/2.5/weather?lat=${location.lat}&lon=${location.lon}&units=metric&appid=0dded06259918d09bb53a2782513f05b`
       );
-      const weatherData: Weather = weatherResponse.data;
+      console.log('Weather API Response:', response.data);
 
-      setWeather(weatherData);
+      const weatherData = response.data;
+      setWeather({
+        current: {
+          temperature_2m: weatherData.main.temp,
+          weather_code: weatherData.weather[0].id,
+        },
+      });
       setCurrentLocation(location);
       setError(null);
-    } catch (err) {
+    } catch (error) {
+      console.error('Error fetching weather:', error);
       setError('Failed to fetch weather data. Please try again later.');
     } finally {
       setWeatherLoading(false);
     }
   };
+
+  const fetchForecast = async (lat: number, lon: number): Promise<Forecast> => {
+    try {
+      const response = await axios.get(
+        `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&units=metric&appid=0dded06259918d09bb53a2782513f05b`
+      );
+      console.log('Forecast API Response:', response.data);
+
+      const data = response.data;
+      const dailyData = data.list.filter((entry: any, index: number) => index % 8 === 0).map((entry: any) => ({
+        date: entry.dt_txt,
+        temperature: entry.main.temp,
+        weather_code: entry.weather[0].id,
+      }));
+
+      return { daily: dailyData };
+    } catch (error) {
+      console.error('Error fetching forecast:', error);
+      throw error;
+    }
+  };
+
+  const fetchUserForecast = async () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setWeatherLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const forecastData = await fetchForecast(latitude, longitude);
+          setForecast(forecastData);
+        } catch (err) {
+          setError('Failed to fetch forecast data. Please try again later.');
+        } finally {
+          setWeatherLoading(false);
+        }
+      },
+      (error) => {
+        let errorMessage = 'Failed to get your location.';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please allow location access in your browser.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out.';
+            break;
+        }
+        setError(errorMessage);
+        setWeatherLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      }
+    );
+  };
+
+  useEffect(() => {
+    fetchData();
+    fetchCryptoData();
+    fetchUserForecast();
+  }, []);
 
   const searchCities = async (query: string) => {
     if (query.length < 2) {
@@ -251,10 +341,50 @@ function Dashboard({ user }: { user: User }) {
     );
   };
 
-  useEffect(() => {
-    fetchData();
-    fetchCryptoData();
-  }, []);
+  const getCurrentLocationForecast = async () => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported by your browser.');
+      return;
+    }
+
+    setWeatherLoading(true);
+    setError(null);
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const forecastData = await fetchForecast(latitude, longitude);
+          setForecast(forecastData);
+        } catch (err) {
+          setError('Failed to fetch forecast data. Please try again later.');
+        } finally {
+          setWeatherLoading(false);
+        }
+      },
+      (error) => {
+        let errorMessage = 'Failed to get your location.';
+        switch (error.code) {
+          case error.PERMISSION_DENIED:
+            errorMessage = 'Location access denied. Please allow location access in your browser.';
+            break;
+          case error.POSITION_UNAVAILABLE:
+            errorMessage = 'Location information unavailable.';
+            break;
+          case error.TIMEOUT:
+            errorMessage = 'Location request timed out.';
+            break;
+        }
+        setError(errorMessage);
+        setWeatherLoading(false);
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 300000,
+      }
+    );
+  };
 
   const getWeatherDescription = (code: number): string => {
     const weatherCodes: { [key: number]: string } = {
@@ -359,6 +489,110 @@ function Dashboard({ user }: { user: User }) {
       )}
     </button>
   );
+
+  const ForecastCard = () => {
+    const [forecast, setForecast] = useState<Forecast | null>(null);
+    const [loading, setLoading] = useState<boolean>(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const fetchUserForecast = async () => {
+      if (!navigator.geolocation) {
+        setError('Geolocation is not supported by your browser.');
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          try {
+            const { latitude, longitude } = position.coords;
+            const forecastData = await fetchForecast(latitude, longitude);
+            setForecast(forecastData);
+          } catch (err) {
+            setError('Failed to fetch forecast data. Please try again later.');
+          } finally {
+            setLoading(false);
+          }
+        },
+        (error) => {
+          let errorMessage = 'Failed to get your location.';
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              errorMessage = 'Location access denied. Please allow location access in your browser.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              errorMessage = 'Location information unavailable.';
+              break;
+            case error.TIMEOUT:
+              errorMessage = 'Location request timed out.';
+              break;
+          }
+          setError(errorMessage);
+          setLoading(false);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 10000,
+          maximumAge: 300000,
+        }
+      );
+    };
+
+    useEffect(() => {
+      fetchUserForecast();
+    }, []);
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full min-h-[400px] hover:shadow-lg transition-all duration-300 ease-in-out relative group">
+        <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+        <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+          <span className="mr-2">📍</span>
+          5-Day Forecast
+        </h2>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-red-600">{error}</p>
+          </div>
+        ) : forecast && Array.isArray(forecast.daily) ? (
+          <div className="flex-1 space-y-4">
+            {forecast.daily.map((day, index) => (
+              <div
+                key={index}
+                className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+              >
+                <div className="text-sm text-gray-700 dark:text-gray-300">
+                  {new Date(day.date).toLocaleDateString('en-US', {
+                    weekday: 'short',
+                    month: 'short',
+                    day: 'numeric',
+                  })}
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-lg font-medium text-gray-900 dark:text-white">
+                    {day.temperature}°C
+                  </span>
+                  <span className="text-xl">
+                    {getWeatherIcon(day.weather_code)}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-500">No forecast data available</p>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <>
@@ -484,11 +718,13 @@ function Dashboard({ user }: { user: User }) {
                       {weather.current?.temperature_2m}°C
                     </span>
                     <span className="text-2xl sm:text-3xl ml-3 opacity-80 animate-pulse">
-                      {getWeatherIcon(weather.current?.weather_code)}
+                      {weather.current?.weather_code !== undefined &&
+                        getWeatherIcon(weather.current.weather_code)}
                     </span>
                   </div>
                   <p className="text-gray-700 dark:text-gray-200 mb-2 font-medium text-lg transition-all duration-300">
-                    {getWeatherDescription(weather.current?.weather_code)}
+                    {weather.current?.weather_code !== undefined &&
+                      getWeatherDescription(weather.current.weather_code)}
                   </p>
                   <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 font-medium transition-all duration-300">
                     {currentLocation.name}
@@ -570,6 +806,10 @@ function Dashboard({ user }: { user: User }) {
                 </div>
               </div>
             )}
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-start">
+          <ForecastCard />
         </div>
       </div>
 
