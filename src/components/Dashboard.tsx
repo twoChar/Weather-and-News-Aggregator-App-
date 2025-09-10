@@ -10,7 +10,6 @@ function Dashboard({ user }: { user: User }) {
 
   const getMoodFromTemp = (t?: number | null): Mood => {
     if (t == null) return 'neutral';
-    // decide using Celsius thresholds
     if (t <= 15) return 'cold';
     if (t >= 32) return 'hot';
     return 'cool';
@@ -43,7 +42,7 @@ function Dashboard({ user }: { user: User }) {
               apiKey="0dded06259918d09bb53a2782513f05b"
               useMyLocation
               heightClassName={LEFT_CARD_HEIGHT}
-              onTempChange={handleTempChange}   // <-- PASS IT
+              onTempChange={handleTempChange}
             />
           </div>
 

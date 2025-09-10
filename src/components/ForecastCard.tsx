@@ -4,37 +4,30 @@ import axios from 'axios';
 type ForecastDay = {
   date: string;
   temperature: number;
-  weather_code: number; // Open-Meteo style code (for emoji mapping)
+  weather_code: number;
 };
 
 type FiveDayForecastCardProps = {
-  /** OpenWeather API key (you can pass process.env.NEXT_PUBLIC_OPENWEATHER_KEY) */
   apiKey?: string;
-  /** If true, tries browser geolocation first, otherwise uses lat/lon props */
   useMyLocation?: boolean;
-  /** Fallback (or explicit) coordinates */
   lat?: number;
   lon?: number;
-  /** Tailwind height class */
   heightClassName?: string;
-  /** Extra classes for the outer card */
   className?: string;
-  /** Card title */
   title?: string;
 };
 
-/** Map OpenWeather condition IDs -> your icon/description codes */
 const normalizeWeatherCode = (owmId: number): number => {
-  if (owmId === 800) return 0;                  // clear
-  if (owmId === 801) return 2;                  // few clouds -> partly cloudy
-  if (owmId >= 802 && owmId <= 804) return 3;   // broken/overcast -> overcast
+  if (owmId === 800) return 0;
+  if (owmId === 801) return 2;
+  if (owmId >= 802 && owmId <= 804) return 3;
   const group = Math.floor(owmId / 100);
   switch (group) {
-    case 2: return 95; // thunderstorm
-    case 3: return 53; // drizzle
-    case 5: return 63; // rain
-    case 6: return 73; // snow
-    case 7: return 45; // mist/fog/etc
+    case 2: return 95;
+    case 3: return 53;
+    case 5: return 63;
+    case 6: return 73;
+    case 7: return 45;
     default: return 2;
   }
 };
@@ -56,10 +49,10 @@ const getWeatherIcon = (code: number): string => {
 };
 
 const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
-  apiKey = '0dded06259918d09bb53a2782513f05b', // <- replace with env var in prod
+  apiKey = '0dded06259918d09bb53a2782513f05b',
   useMyLocation = true,
-  lat = 28.6139,         // New Delhi fallback
-  lon = 77.2090,         // New Delhi fallback
+  lat = 28.6139,
+  lon = 77.2090,
   heightClassName = 'h-[460px] lg:h-[460px]',
   className = '',
   title = '5-Day Forecast',
@@ -72,7 +65,6 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
     const { data } = await axios.get(
       `https://api.openweathermap.org/data/2.5/forecast?lat=${plat}&lon=${plon}&units=metric&appid=${apiKey}`
     );
-    // 3-hourly → pick one every ~24h (8 * 3h = 24h)
     const daily = data.list
       .filter((_: any, idx: number) => idx % 8 === 0)
       .slice(0, 5)
@@ -104,9 +96,7 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
             );
             plat = position.coords.latitude;
             plon = position.coords.longitude;
-          } catch {
-            // geolocation denied or failed → fall back to provided lat/lon
-          }
+          } catch {}
         }
 
         const result = await fetchForecast(plat, plon);
