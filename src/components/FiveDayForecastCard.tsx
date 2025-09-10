@@ -133,38 +133,38 @@ const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
 
   // initial load (geolocation → fallback)
   useEffect(() => {
-    let cancelled = false;
-    const init = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        let plat = lat, plon = lon, label = 'My Location';
-        if (useMyLocation && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-          try {
-            const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
-              navigator.geolocation.getCurrentPosition(
-                resolve, reject,
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
-              )
-            );
-            plat = pos.coords.latitude;
-            plon = pos.coords.longitude;
-          } catch { /* ignore */ }
-        } else {
+  let cancelled = false;
+  const init = async () => {
+    try {
+      let plat = lat, plon = lon, label = 'My Location';
+      if (useMyLocation && typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+        try {
+          const pos = await new Promise<GeolocationPosition>((resolve, reject) =>
+            navigator.geolocation.getCurrentPosition(
+              resolve, reject,
+              { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+            )
+          );
+          plat = pos.coords.latitude;
+          plon = pos.coords.longitude;
+        } catch {
           label = 'New Delhi';
         }
-        if (!cancelled) {
-          setLocationName(label);
-          await loadAll(plat, plon, label);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+      } else {
+        label = 'New Delhi';
       }
-    };
-    init();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [apiKey, useMyLocation, lat, lon]);
+      if (!cancelled) {
+        setLocationName(label);
+        await loadAll(plat, plon, label); // loadAll manages loading state
+      }
+    } catch {
+      // no-op
+    }
+  };
+  init();
+  return () => { cancelled = true; };
+}, [apiKey, useMyLocation, lat, lon]);
+
 
   // search helpers
   const searchCities = async (query: string) => {

@@ -5,11 +5,20 @@ export type Mood = 'neutral' | 'cold' | 'hot' | 'cool';
 
 type LatestNewsCardProps = {
   apiKey?: string;
-  country?: string;            // ISO 3166-1 (e.g., 'us', 'in')
-  heightClassName?: string;    // Tailwind height class
+  /** ISO 3166-1 (e.g., 'us', 'in') */
+  country?: string;
+  /** Tailwind height class */
+  heightClassName?: string;
+  /** Extra classes for the outer card */
   className?: string;
+  /** Mood coming from Dashboard (computed from live temperature) */
   mood?: Mood;
+  /** Card title */
   title?: string;
+  /** If true, add a single mood keyword to the NewsAPI query for better results */
+  biasApiWithMood?: boolean;
+  /** If true, when mood ≠ neutral show ONLY matching items (no fallback) */
+  exactMoodOnly?: boolean;
 };
 
 const keywordMap: Record<Mood, string[]> = {
@@ -30,11 +39,11 @@ const keywordMap: Record<Mood, string[]> = {
   ],
 };
 
-const moodStyles: Record<Mood, {bg: string; text: string; label: string}> = {
-  neutral: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-200', label: 'Neutral' },
-  cold:    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-800 dark:text-blue-200', label: 'Cold' },
-  hot:     { bg: 'bg-red-100 dark:bg-red-900/40',  text: 'text-red-800 dark:text-red-200',   label: 'Hot' },
-  cool:    { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-200', label: 'Cool' },
+const moodStyles: Record<Mood, { bg: string; text: string; label: string; emoji: string }> = {
+  neutral: { bg: 'bg-gray-100 dark:bg-gray-700',        text: 'text-gray-700 dark:text-gray-200',     label: 'Neutral', emoji: '😐' },
+  cold:    { bg: 'bg-blue-100 dark:bg-blue-900/40',     text: 'text-blue-800 dark:text-blue-200',     label: 'Cold',    emoji: '🥶' },
+  hot:     { bg: 'bg-red-100 dark:bg-red-900/40',       text: 'text-red-800 dark:text-red-200',       label: 'Hot',     emoji: '🥵' },
+  cool:    { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-200', label: 'Cool',  emoji: '😎' },
 };
 
 const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
@@ -44,6 +53,8 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
   className = '',
   mood = 'neutral',
   title = 'Latest News',
+  biasApiWithMood = true,
+  exactMoodOnly = true,
 }) => {
   const [allNews, setAllNews] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -56,14 +67,15 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
         setError(null);
 
         const base = `https://newsapi.org/v2/top-headlines?country=${country}&language=en&pageSize=50&apiKey=${apiKey}`;
-        const url = base;
+
+        // Lightly bias the API toward the mood (keep it to ONE keyword; NewsAPI dislikes long boolean queries)
+        const firstKw = biasApiWithMood ? keywordMap[mood]?.[0] : undefined;
+        const url = firstKw ? `${base}&q=${encodeURIComponent(firstKw)}` : base;
 
         const { data } = await axios.get(url);
-
         if (data?.status !== 'ok') {
           throw new Error(data?.message || 'NewsAPI returned an error.');
         }
-
         setAllNews(Array.isArray(data?.articles) ? data.articles : []);
       } catch (e: any) {
         console.error('News fetch error:', e?.message || e);
@@ -75,12 +87,15 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
     };
 
     fetchNews();
-  }, [apiKey, country, mood]);
+  }, [apiKey, country, mood, biasApiWithMood]);
 
-  // Client-side filter (safety net)
+  // Mood filter
   const filteredNews = useMemo(() => {
     const kws = keywordMap[mood];
-    if (!kws.length) return allNews;
+    if (!kws.length) {
+      // neutral → show everything
+      return allNews;
+    }
 
     const terms = kws.map(k => k.toLowerCase());
     const matches = allNews.filter(a => {
@@ -88,8 +103,9 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
       return terms.some(t => text.includes(t));
     });
 
-    return matches.length ? matches : allNews;
-  }, [allNews, mood]);
+    // exactMoodOnly true → NEVER fall back to all when mood is set
+    return exactMoodOnly ? matches : (matches.length ? matches : allNews);
+  }, [allNews, mood, exactMoodOnly]);
 
   const moodClass = moodStyles[mood];
 
@@ -121,6 +137,7 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
           title={`Mood filter: ${moodClass.label}`}
           aria-label={`Mood: ${moodClass.label}`}
         >
+          <span className="mr-1">{moodClass.emoji}</span>
           {moodClass.label}
         </span>
       </div>
@@ -154,8 +171,11 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
           ))}
         </div>
       ) : (
+        // Clear empty state when mood is set but we didn’t find matches
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500">No news available</p>
+          <p className="text-gray-500">
+            No {moodClass.label.toLowerCase()}-mood headlines right now.
+          </p>
         </div>
       )}
     </div>
