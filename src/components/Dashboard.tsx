@@ -7,7 +7,7 @@ interface User { name: string; }
 
 function Dashboard({ user }: { user: User }) {
   // left stack height knobs
-  const LEFT_CARD_HEIGHT = 'h-[550px]'; // keep compact as you wanted
+  const LEFT_CARD_HEIGHT = 'h-[560px]'; // keep compact as you wanted
 
   const { tempC, loading: tempLoading, locationName } = useCurrentTemp();
 
