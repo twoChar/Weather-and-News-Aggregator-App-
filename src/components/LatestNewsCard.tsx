@@ -30,6 +30,13 @@ const keywordMap: Record<Mood, string[]> = {
   ],
 };
 
+const moodStyles: Record<Mood, {bg: string; text: string; label: string}> = {
+  neutral: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-200', label: 'Neutral' },
+  cold:    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-800 dark:text-blue-200', label: 'Cold' },
+  hot:     { bg: 'bg-red-100 dark:bg-red-900/40',  text: 'text-red-800 dark:text-red-200',   label: 'Hot' },
+  cool:    { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-200', label: 'Cool' },
+};
+
 const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
   apiKey = '9f983265846e40e297d1c8e71a058c32',
   country = 'us',
@@ -48,19 +55,11 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
         setLoading(true);
         setError(null);
 
-        // Base URL — no complex q. We’ll filter client-side.
         const base = `https://newsapi.org/v2/top-headlines?country=${country}&language=en&pageSize=50&apiKey=${apiKey}`;
-
-        // OPTIONAL: If you want to bias the results a bit, uncomment the next lines
-        // to send only ONE simple keyword (no OR/parentheses).
-        // const firstKw = keywordMap[mood][0];
-        // const url = firstKw ? `${base}&q=${encodeURIComponent(firstKw)}` : base;
-
         const url = base;
 
         const { data } = await axios.get(url);
 
-        // NewsAPI returns {status:"ok"} or {status:"error", message:"..."}
         if (data?.status !== 'ok') {
           throw new Error(data?.message || 'NewsAPI returned an error.');
         }
@@ -89,9 +88,10 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
       return terms.some(t => text.includes(t));
     });
 
-    // if nothing matched, fall back to unfiltered list so the card isn’t empty
     return matches.length ? matches : allNews;
   }, [allNews, mood]);
+
+  const moodClass = moodStyles[mood];
 
   return (
     <div
@@ -105,10 +105,25 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
       <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10" />
       <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10" />
 
-      <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
-        <span className="mr-2">📰</span>
-        {title}
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white flex items-center">
+          <span className="mr-2">📰</span>
+          {title}
+        </h2>
+
+        {/* Mood pill */}
+        <span
+          className={[
+            'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
+            moodClass.bg,
+            moodClass.text,
+          ].join(' ')}
+          title={`Mood filter: ${moodClass.label}`}
+          aria-label={`Mood: ${moodClass.label}`}
+        >
+          {moodClass.label}
+        </span>
+      </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">
