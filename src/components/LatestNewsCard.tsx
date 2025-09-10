@@ -5,20 +5,11 @@ export type Mood = 'neutral' | 'cold' | 'hot' | 'cool';
 
 type LatestNewsCardProps = {
   apiKey?: string;
-  /** ISO 3166-1 (e.g., 'us', 'in') */
-  country?: string;
-  /** Tailwind height class */
+  country?: string;            // used for top-headlines fallback
   heightClassName?: string;
-  /** Extra classes for the outer card */
   className?: string;
-  /** Mood coming from Dashboard (computed from live temperature) */
   mood?: Mood;
-  /** Card title */
   title?: string;
-  /** If true, add a single mood keyword to the NewsAPI query for better results */
-  biasApiWithMood?: boolean;
-  /** If true, when mood ≠ neutral show ONLY matching items (no fallback) */
-  exactMoodOnly?: boolean;
 };
 
 const keywordMap: Record<Mood, string[]> = {
@@ -26,25 +17,34 @@ const keywordMap: Record<Mood, string[]> = {
   cold: [
     'recession','layoff','bankruptcy','decline','crash','loss','pollution',
     'war','conflict','death','dies','killed','fatal','flood','earthquake',
-    'drought','inflation','corruption','shortage','poverty'
+    'drought','inflation','corruption','shortage','poverty','tragedy','debt','crisis'
   ],
   hot: [
     'fear','threat','panic','risk','warning','alert','attack','terror',
-    'violence','scare','outbreak','cyberattack','breach','storm'
+    'violence','scare','outbreak','cyberattack','breach','storm','heatwave','wildfire'
   ],
   cool: [
     'win','wins','winner','victory','champion','record','breakthrough','award',
     'medal','celebrates','celebration','happiness','happy','joy','success',
-    'surge','growth','profit'
+    'surge','growth','profit','uplifting','inspiring'
   ],
 };
 
-const moodStyles: Record<Mood, { bg: string; text: string; label: string; emoji: string }> = {
-  neutral: { bg: 'bg-gray-100 dark:bg-gray-700',        text: 'text-gray-700 dark:text-gray-200',     label: 'Neutral', emoji: '😐' },
-  cold:    { bg: 'bg-blue-100 dark:bg-blue-900/40',     text: 'text-blue-800 dark:text-blue-200',     label: 'Cold',    emoji: '🥶' },
-  hot:     { bg: 'bg-red-100 dark:bg-red-900/40',       text: 'text-red-800 dark:text-red-200',       label: 'Hot',     emoji: '🥵' },
-  cool:    { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-200', label: 'Cool',  emoji: '😎' },
+const moodStyles: Record<Mood, {bg: string; text: string; label: string}> = {
+  neutral: { bg: 'bg-gray-100 dark:bg-gray-700', text: 'text-gray-700 dark:text-gray-200', label: 'Neutral' },
+  cold:    { bg: 'bg-blue-100 dark:bg-blue-900/40', text: 'text-blue-800 dark:text-blue-200', label: 'Cold' },
+  hot:     { bg: 'bg-red-100 dark:bg-red-900/40',  text: 'text-red-800 dark:text-red-200',   label: 'Hot' },
+  cool:    { bg: 'bg-emerald-100 dark:bg-emerald-900/40', text: 'text-emerald-800 dark:text-emerald-200', label: 'Cool' },
 };
+
+function buildMoodQuery(mood: Mood): string | null {
+  const terms = keywordMap[mood];
+  if (!terms?.length) return null;
+  // Use OR inside quotes to let NewsAPI `everything` match any of them
+  // Also bias to last few days to keep things relevant.
+  const quoted = terms.slice(0, 8).map(t => `"${t}"`); // cap to keep query compact
+  return `(${quoted.join(' OR ')})`;
+}
 
 const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
   apiKey = '9f983265846e40e297d1c8e71a058c32',
@@ -53,59 +53,73 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
   className = '',
   mood = 'neutral',
   title = 'Latest News',
-  biasApiWithMood = true,
-  exactMoodOnly = true,
 }) => {
-  const [allNews, setAllNews] = useState<any[]>([]);
+  const [articles, setArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchNews = async () => {
       try {
         setLoading(true);
         setError(null);
 
-        const base = `https://newsapi.org/v2/top-headlines?country=${country}&language=en&pageSize=50&apiKey=${apiKey}`;
+        const q = buildMoodQuery(mood);
 
-        // Lightly bias the API toward the mood (keep it to ONE keyword; NewsAPI dislikes long boolean queries)
-        const firstKw = biasApiWithMood ? keywordMap[mood]?.[0] : undefined;
-        const url = firstKw ? `${base}&q=${encodeURIComponent(firstKw)}` : base;
+        if (q) {
+          // 1) Try mood-targeted search first (everything supports OR/quotes)
+          const everythingURL =
+            `https://newsapi.org/v2/everything?language=en&sortBy=publishedAt&pageSize=50&q=${encodeURIComponent(q)}&apiKey=${apiKey}`;
+          const { data } = await axios.get(everythingURL);
 
-        const { data } = await axios.get(url);
-        if (data?.status !== 'ok') {
-          throw new Error(data?.message || 'NewsAPI returned an error.');
+          if (!cancelled && data?.status === 'ok' && Array.isArray(data.articles) && data.articles.length) {
+            setArticles(data.articles);
+            return;
+          }
+          // 2) Fallback to top-headlines if nothing matched
         }
-        setAllNews(Array.isArray(data?.articles) ? data.articles : []);
+
+        const topURL =
+          `https://newsapi.org/v2/top-headlines?country=${country}&language=en&pageSize=50&apiKey=${apiKey}`;
+        const { data: top } = await axios.get(topURL);
+
+        if (!cancelled) {
+          if (top?.status !== 'ok') throw new Error(top?.message || 'NewsAPI error');
+          setArticles(Array.isArray(top.articles) ? top.articles : []);
+        }
       } catch (e: any) {
-        console.error('News fetch error:', e?.message || e);
-        setAllNews([]);
-        setError('Failed to fetch news. Please try again later.');
+        if (!cancelled) {
+          console.error('News fetch error:', e?.message || e);
+          setArticles([]);
+          setError('Failed to fetch news. Please try again later.');
+        }
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchNews();
-  }, [apiKey, country, mood, biasApiWithMood]);
+    return () => { cancelled = true; };
+  }, [apiKey, country, mood]);
 
-  // Mood filter
-  const filteredNews = useMemo(() => {
-    const kws = keywordMap[mood];
-    if (!kws.length) {
-      // neutral → show everything
-      return allNews;
-    }
+  // If we used `everything` with mood terms, the server already filtered for us.
+  // But for the top-headlines fallback, we still do a light client-side filter to bias results.
+  const filtered = useMemo(() => {
+    const q = buildMoodQuery(mood);
+    if (q) return articles; // already filtered server-side
 
-    const terms = kws.map(k => k.toLowerCase());
-    const matches = allNews.filter(a => {
+    const terms = keywordMap[mood]?.map(t => t.toLowerCase()) ?? [];
+    if (!terms.length) return articles;
+
+    const matches = articles.filter(a => {
       const text = `${a?.title ?? ''} ${a?.description ?? ''} ${a?.content ?? ''}`.toLowerCase();
       return terms.some(t => text.includes(t));
     });
 
-    // exactMoodOnly true → NEVER fall back to all when mood is set
-    return exactMoodOnly ? matches : (matches.length ? matches : allNews);
-  }, [allNews, mood, exactMoodOnly]);
+    return matches.length ? matches : articles;
+  }, [articles, mood]);
 
   const moodClass = moodStyles[mood];
 
@@ -126,8 +140,6 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
           <span className="mr-2">📰</span>
           {title}
         </h2>
-
-        {/* Mood pill */}
         <span
           className={[
             'inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold',
@@ -137,7 +149,6 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
           title={`Mood filter: ${moodClass.label}`}
           aria-label={`Mood: ${moodClass.label}`}
         >
-          <span className="mr-1">{moodClass.emoji}</span>
           {moodClass.label}
         </span>
       </div>
@@ -150,9 +161,9 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
         <div className="flex-1 flex items-center justify-center">
           <p className="text-red-600">{error}</p>
         </div>
-      ) : filteredNews.length > 0 ? (
+      ) : filtered.length > 0 ? (
         <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
-          {filteredNews.map((article, index) => (
+          {filtered.map((article, index) => (
             <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
               <a
                 href={article.url}
@@ -171,11 +182,8 @@ const LatestNewsCard: React.FC<LatestNewsCardProps> = ({
           ))}
         </div>
       ) : (
-        // Clear empty state when mood is set but we didn’t find matches
         <div className="flex-1 flex items-center justify-center">
-          <p className="text-gray-500">
-            No {moodClass.label.toLowerCase()}-mood headlines right now.
-          </p>
+          <p className="text-gray-500">No news matched this mood. Showing top headlines instead might help.</p>
         </div>
       )}
     </div>
