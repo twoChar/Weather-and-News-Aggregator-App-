@@ -49,7 +49,7 @@ const getWeatherIcon = (code: number): string => {
 };
 
 const FiveDayForecastCard: React.FC<FiveDayForecastCardProps> = ({
-  apiKey = '0dded06259918d09bb53a2782513f05b',
+  apiKey = process.env.REACT_APP_OPENWEATHER_API_KEY,
   useMyLocation = true,
   lat = 28.6139,
   lon = 77.2090,
