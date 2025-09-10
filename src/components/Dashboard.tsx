@@ -545,7 +545,7 @@ function Dashboard({ user }: { user: User }) {
     }, []);
 
     return (
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full min-h-[400px] hover:shadow-lg transition-all duration-300 ease-in-out relative group">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full h-[460px] lg:h-[460px] overflow-hidden hover:shadow-lg transition-all duration-300 ease-in-out relative group">
         <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-cyan-400 via-blue-500 to-indigo-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
         <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
@@ -594,6 +594,67 @@ function Dashboard({ user }: { user: User }) {
     );
   };
 
+  const NewsCard = () => {
+    const [news, setNews] = useState<any[]>([]);
+    const [loading, setLoading] = useState<boolean>(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+      const fetchNews = async () => {
+        try {
+          const response = await axios.get(
+            'https://newsapi.org/v2/top-headlines?country=us&apiKey=9f983265846e40e297d1c8e71a058c32'
+          );
+          setNews(response.data.articles);
+          setError(null);
+        } catch (err) {
+          setError('Failed to fetch news. Please try again later.');
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      fetchNews();
+    }, []);
+
+    return (
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col h-full h-[460px] lg:h-[460px] overflow-hidden hover:shadow-lg transition-all duration-300 ease-in-out relative group">
+        <div className="absolute inset-0 rounded-lg bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300 -z-10"></div>
+        <div className="absolute inset-[2px] rounded-lg bg-white dark:bg-gray-800 -z-10"></div>
+        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+          <span className="mr-2">📰</span>
+          Latest News
+        </h2>
+        {loading ? (
+          <div className="flex-1 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-500"></div>
+          </div>
+        ) : error ? (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-red-600">{error}</p>
+          </div>
+        ) : news.length > 0 ? (
+          <div className="flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1">
+            {news.map((article, index) => (
+              <div key={index} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                <a href={article.url} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline">
+                  {article.title}
+                </a>
+                <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                  {article.description || 'No description available.'}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex items-center justify-center">
+            <p className="text-gray-500">No news available</p>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <>
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
@@ -615,6 +676,15 @@ function Dashboard({ user }: { user: User }) {
                 Here's what's happening today
               </p>
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-start">
+          <div className="lg:col-span-1">
+            <ForecastCard />
+          </div>
+          <div className="lg:col-span-1">
+            <NewsCard />
           </div>
         </div>
 
@@ -807,10 +877,6 @@ function Dashboard({ user }: { user: User }) {
               </div>
             )}
         </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8 items-start">
-          <ForecastCard />
-        </div>
       </div>
 
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 flex flex-col min-h-[500px] hover:shadow-lg transition-all duration-300 ease-in-out relative group">
@@ -903,8 +969,8 @@ function Dashboard({ user }: { user: User }) {
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                     <span>Refreshing...</span>
                   </>
-              ) : (
-                <>
+                ) : (
+                  <>
                 
                   <span>Refresh </span>
                 </>
