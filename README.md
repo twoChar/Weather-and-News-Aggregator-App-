@@ -1,4 +1,4 @@
-# 🌦️ Weather & News Dashboard
+# 🌦️ Weather & News Dashboard, Tushar maaf kar dijiye jaan humko, agar aap ye dekhe mera dost mat chiino humse Tushar, mera koi dost nhi hai apke alawa, na jao chor ke na jao
 
 A **React + TypeScript + Tailwind CSS** application that combines **live weather data** with **context-aware news filtering**.  
 Instead of showing random news, the app adjusts the type of news you see based on the **temperature of your location**.  
